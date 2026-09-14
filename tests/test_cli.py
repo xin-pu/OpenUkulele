@@ -150,6 +150,20 @@ def test_png_watermark_custom_and_disabled(tmp_path, twinkle_mid):
     assert (out2 / "twinkle-easy.png").exists()
 
 
+def test_png_default_has_no_watermark(tmp_path, twinkle_mid, monkeypatch):
+    captured: list[str] = []
+
+    def fake_render_png(*args, **kwargs):
+        captured.append(kwargs["watermark"])
+        return []
+
+    monkeypatch.setattr("uketab.render.image.render_png", fake_render_png)
+    out = tmp_path / "out"
+    code = run("arrange", str(twinkle_mid), "--output-dir", str(out), "--png")
+    assert code == EXIT_OK
+    assert captured == ["", ""]
+
+
 def test_no_png_by_default(tmp_path, twinkle_mid):
     out = tmp_path / "out"
     code = run("arrange", str(twinkle_mid), "--output-dir", str(out))

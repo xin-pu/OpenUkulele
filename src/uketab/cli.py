@@ -67,8 +67,8 @@ def build_parser() -> argparse.ArgumentParser:
     )
     arrange_parser.add_argument(
         "--watermark",
-        default="pu.xin@outlook.com",
-        help="图片谱水印文字（默认 pu.xin@outlook.com）；传空串 --watermark \"\" 可关闭",
+        default="",
+        help="图片谱水印文字（默认关闭；传入非空文本启用）",
     )
     arrange_parser.add_argument(
         "--lyrics",
