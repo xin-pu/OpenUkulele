@@ -1,6 +1,7 @@
 """CLI end-to-end tests with generated MIDI fixtures."""
 
 import json
+from contextlib import contextmanager
 import sys
 import types
 
@@ -267,3 +268,25 @@ def test_audio_input_filters_simultaneous_candidates_to_melody(tmp_path, monkeyp
 
     report = json.loads((out / "voice-report.json").read_text(encoding="utf-8"))
     assert report["input"]["events"] == 1
+
+
+def test_audio_vocal_separation_uses_existing_transcribe_progress_stage(tmp_path, monkeypatch):
+    bp = types.ModuleType("basic_pitch")
+    bp.ICASSP_2022_MODEL_PATH = "/fake/models/nmp"
+    inference = types.ModuleType("basic_pitch.inference")
+    inference.predict = lambda *args, **kwargs: (object(), None, [(0.0, 0.5, 72, 0.9)])
+    monkeypatch.setitem(sys.modules, "basic_pitch", bp)
+    monkeypatch.setitem(sys.modules, "basic_pitch.inference", inference)
+
+    @contextmanager
+    def fake_separated_vocals(source):
+        yield source
+
+    monkeypatch.setattr("uketab.input.separation.separated_vocals", fake_separated_vocals)
+    audio = tmp_path / "voice.wav"
+    audio.write_bytes(b"RIFF" + b"\x00" * 32)
+    out = tmp_path / "out"
+
+    assert run(
+        "arrange", str(audio), "--tempo", "96", "--separate-vocals", "--output-dir", str(out)
+    ) == EXIT_OK

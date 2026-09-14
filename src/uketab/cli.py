@@ -167,15 +167,16 @@ def _run_arrange(
         from .input.audio import load_audio
         from .melody import select_melody
 
-        reporter.progress("transcribe", 15, "正在转写音频")
         if args.separate_vocals:
             from .input.separation import separated_vocals
 
-            reporter.progress("separate", 10, "正在分离人声")
+            reporter.progress("transcribe", 10, "正在分离人声")
             with separated_vocals(input_path) as vocals_path:
+                reporter.progress("transcribe", 15, "正在转写音频")
                 events, audio_warnings = load_audio(vocals_path)
             warnings.append("已使用 Demucs vocals stem 进行转写")
         else:
+            reporter.progress("transcribe", 15, "正在转写音频")
             events, audio_warnings = load_audio(input_path)
         raw_event_count = len(events)
         events = select_melody(events)
