@@ -74,11 +74,11 @@ TICK_COLOR = "#a8a294"
 LABEL_COLOR = "#8a8477"
 TITLE_COLOR = "#2f2f2b"
 
-#: watermark styling (email shown both as a large faint diagonal and a signature)
+#: watermark styling, enabled only when the caller supplies a value.
 WATERMARK_COLOR = "#4a463c"
 WATERMARK_DIAG_ALPHA = 0.06
 WATERMARK_SIG_ALPHA = 0.62
-DEFAULT_WATERMARK = "pu.xin@outlook.com"
+DEFAULT_WATERMARK = ""
 
 STRING_LABELS = {1: "A", 2: "E", 3: "C", 4: "G"}
 ROLE_COLORS = {"melody": "#1a1a1a", "bass": "#0f6aa5", "harmony": "#8a8a8a"}

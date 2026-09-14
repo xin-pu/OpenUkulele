@@ -1,0 +1,27 @@
+root = true
+
+[*]
+charset = utf-8-bom
+insert_final_newline = true
+trim_trailing_whitespace = true
+end_of_line = crlf
+
+[*.cs]
+indent_style = space
+indent_size = 4
+csharp_style_namespace_declarations = file_scoped:warning
+# Folder must mirror namespace (dev-standards / design doc §2).
+dotnet_diagnostic.IDE0130.severity = error
+dotnet_diagnostic.CA1848.severity = none
+dotnet_sort_system_directives_first = true
+csharp_using_directive_placement = outside_namespace:warning
+dotnet_style_qualification_for_field = false:warning
+dotnet_style_qualification_for_property = false:warning
+dotnet_style_qualification_for_method = false:warning
+
+[*.{xml,xaml,json,props,targets,config}]
+indent_style = space
+indent_size = 2
+
+[*.md]
+trim_trailing_whitespace = false

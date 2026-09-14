@@ -62,6 +62,13 @@ def test_align_ignores_bass_and_skips_unmatched_notes():
     assert mapping == {Fraction(0): "啊", Fraction(1): "哦"}  # 咦 dropped: no note left
 
 
+def test_adjacent_lrc_lines_do_not_claim_the_same_melody_onset():
+    """A tolerance overlap must not let an earlier line steal line two's onset."""
+    lines = load_lyrics_from_text("[00:00.00]甲乙\n[00:01.00]丙\n")
+    mapping = align(lines, [Fraction(0), Fraction(2), Fraction(4)], 120.0)
+    assert mapping == {Fraction(0): "甲", Fraction(2): "丙"}
+
+
 def test_plain_text_zips_across_all_melody_notes():
     notes = [tab_note(Fraction(b), 72) for b in range(4)]
     mapping = align(load_lyrics_from_text("春天来了", ".txt"), [n.note.beat for n in notes], 120.0)

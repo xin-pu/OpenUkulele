@@ -1,11 +1,29 @@
 # OpenUkulele / UkeTab
 
-离线尤克里里指弹谱生成器：接受 MIDI 或普通音频，为高 G（re-entrant G4-C4-E4-A4）、
-15 品四弦尤克里里生成**简易**与**困难**两版指弹谱。每份成功写出的谱都通过独立的
-可玩性校验（同弦冲突、音域、跨度、横按、左手指法），并输出 ASCII tab、GP5 与
-JSON 报告。
+一个离线运行的尤克里里指弹谱生成器。给它一份 MIDI，或一段普通手机录音，UkeTab 会为
+默认高 G（re-entrant G4-C4-E4-A4）、15 品四弦尤克里里生成**简易**与**困难**两版可编辑指弹谱。
+
+它的重点不是逐音还原一首复杂混音歌曲，而是把旋律转换成“能在琴上弹出来”的版本：核心引擎会枚举弦/品候选、选择换把成本更低的指法，并在输出前独立检查同弦冲突、音域、左手跨度、横按和手指占用。无法满足约束时，会按“去和声 → 去低音 → 仅保留旋律”的顺序自动简化，而不会输出明知不可弹的谱。
+
+## 当前成果
+
+- 支持 `.mid` / `.midi`，以及可选的 `.wav`、`.mp3`、`.m4a`、`.ogg` 音频输入。
+- 输出两档难度：简易版限制在 0–5 品、最多两音且无横按；困难版支持 0–15 品、至多四音与横按。
+- 使用高 G re-entrant 调弦模型，而非复用吉他的线性调弦假设。
+- 导出 ASCII tab、Guitar Pro 5（GP5）、JSON 可玩性报告，以及可选 PNG/PDF 图片谱。
+- 支持 `.lrc` 时间轴歌词或纯文本歌词，仅对齐旋律音并显示在 ASCII/图片谱中。
+- 默认不写入任何个人水印；传入 `--watermark "文字"` 才添加水印。
+- 本地测试套件目前收集 120 项单元、集成与 CLI 测试。
+
+## 适合与不适合的输入
+
+**最适合**：有明确节拍的 MIDI，或 30–60 秒、安静环境、单声部/单乐器、旋律主要在 C4–C6 的手机录音。
+
+**暂不适合**：带大量人声、鼓、贝斯和效果器的完整商业混音。音频转写使用 Basic Pitch，可能漏音、错音或无法识别低音；工具会将超出尤克里里音域或不可编配的小节记录到报告中。需要稳定结果时，请优先使用 MIDI。
 
 设计文档：[docs/superpowers/specs/2026-09-13-ukulele-tab-cli-design.md](docs/superpowers/specs/2026-09-13-ukulele-tab-cli-design.md)
+
+问题与后续改进：[docs/issue-ledger.md](docs/issue-ledger.md)
 
 ## 安装
 
@@ -29,7 +47,7 @@ python -m venv .venv
 .venv\Scripts\uketab arrange .\recording.m4a --tempo 96 --output-dir .\output
 
 # 附带 A4 图片谱（需 image extra；--pdf 出多页 PDF，--orientation portrait 竖版，
-# --watermark "你的名字" 自定义水印，默认 pu.xin@outlook.com，传空串关闭）
+# --watermark "你的名字" 可选自定义水印；默认不添加水印）
 .venv\Scripts\uketab arrange .\samples\melody.mid --output-dir .\output --png
 
 # 歌词对齐到旋律音，渲染在谱面上方（.lrc 带时间轴最准；纯文本按音节顺序贴）
@@ -46,7 +64,7 @@ python -m venv .venv
 | `{stem}-easy.txt` / `{stem}-hard.txt` | 四行 ASCII tab（A/E/C/G），含速度、调弦、小节线 |
 | `{stem}-easy.gp5` / `{stem}-hard.gp5` | 四弦 GP5（调弦 A4/E4/C4/G4，15 品，GM 尤克里里音色） |
 | `{stem}-report.json` | 输入元数据、量化参数、两版统计、校验问题、警告 |
-| `{stem}-easy.png` / `{stem}-hard.png` | （`--png`）A4 图片谱：淡雅渐变底、水印署名、**歌词行（`--lyrics`）**、弦名 A/E/C/G、把位框、**标准节奏记谱（符头/符干/符杠连杠/附点/连音线，旋律朝上低音朝下）**、角色着色 |
+| `{stem}-easy.png` / `{stem}-hard.png` | （`--png`）A4 图片谱：淡雅渐变底、可选水印、**歌词行（`--lyrics`）**、弦名 A/E/C/G、把位框、**标准节奏记谱（符头/符干/符杠连杠/附点/连音线，旋律朝上低音朝下）**、角色着色 |
 | `{stem}-easy.pdf` / `{stem}-hard.pdf` | （`--pdf`）A4 多页 PDF |
 
 ### 退出码
@@ -58,6 +76,29 @@ python -m venv .venv
 | 3 | 输入 / 转写错误 |
 | 4 | 至少一版不可生成（报告列出失败小节） |
 | 5 | 导出错误 |
+
+## 桌面壳（WPF，实验性）
+
+`desktop/` 下是 .NET 10 WPF 应用，通过受控子进程调用本仓库的 `uketab` CLI
+（Python 仍是唯一转写/编配/导出权威，见 `docs/adr/0001-wpf-shell-invokes-python-cli.md`）：
+图形化选择输入/歌词/输出目录，实时阶段进度与取消，双版本结果预览与一键打开。
+
+```powershell
+# 前置：.NET 10 SDK + 已按上文安装并带 image extra 的 venv
+cd desktop
+dotnet restore
+dotnet run --project OpenUkulele.Desktop    # 启动主窗口
+dotnet test                                  # 26 项 xUnit（含真实 python 进程集成测试）
+```
+
+配置在 `desktop/OpenUkulele.Desktop/appsettings.json`：`UkeTab.PythonExecutable`
+（指向带 `uketab` 的 venv python，支持相对应用目录的路径或裸命令名）、
+`Module`（默认 `uketab`）、`ProcessTimeoutSeconds`（30–900，超时杀整棵进程树）。
+
+CLI 侧配套新增 `--progress-json` / `--operation-id`：stdout 变为纯 NDJSON
+进度事件（阶段 vocabulary input/transcribe/normalize/arrange/lyrics/export，
+百分比单调不减，终结 completed/failed 事件带稳定错误码与报告路径）。不传该
+参数时 CLI 行为完全不变。
 
 ## 难度预设
 
@@ -79,7 +120,7 @@ Basic Pitch 是通用转写模型：对人声/混音会漏音、错音，也常�
 ## 开发
 
 ```powershell
-.venv\Scripts\python -m pytest        # 105 项单元/集成/CLI 测试
+.venv\Scripts\python -m pytest        # 运行全部单元、集成与 CLI 测试
 ```
 
 架构（详见设计文档）：`input`（MIDI/音频 → NoteEvent）→ `timing`（量化/小节）→

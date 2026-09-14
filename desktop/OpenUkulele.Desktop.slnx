@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="OpenUkulele.Desktop.Tests/OpenUkulele.Desktop.Tests.csproj" />
+  <Project Path="OpenUkulele.Desktop/OpenUkulele.Desktop.csproj" />
+</Solution>

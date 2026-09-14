@@ -86,15 +86,16 @@ def align(
     lines: list[LyricLine],
     melody_beats: list[Fraction],
     tempo_bpm: float,
-    window_tolerance_beats: Fraction = Fraction(1),
+    window_tolerance_beats: Fraction = Fraction(0),
 ) -> dict[Fraction, str]:
     """Return ``beat -> lyric text`` for melody onsets.
 
     Each LRC line claims the melody notes starting in its window
     ``[start, next_start)``; its tokens are assigned to those notes in
-    order. A short tolerance lets a line bleed into the next when notes
-    are late. Plain-text input (single line at t=0) covers the whole
-    piece: tokens zip across every melody note.
+    order. Timestamped lines use non-overlapping half-open windows by
+    default, so one line cannot consume the next line's onset. Plain-text
+    input (single line at t=0) covers the whole piece: tokens zip across
+    every melody note.
     """
     if not melody_beats:
         return {}
@@ -110,10 +111,10 @@ def align(
         if not tokens:
             continue
         start = bounds[index]
-        # Window end: next line start (+tolerance), or piece end for the last
-        # / untimed line.
+        # The default zero tolerance keeps adjacent LRC windows disjoint.
+        # A caller may explicitly opt into a tolerance for a known offset.
         if index + 1 < len(lines):
-            end = bounds[index + 1] + window_tolerance_beats
+            end = bounds[index + 1]
         else:
             end = melody_beats[-1] + 1
         window = [

@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>OpenUkulele.Desktop.Tests</RootNamespace>
+    <AssemblyName>OpenUkulele.Desktop.Tests</AssemblyName>
+    <IsPackable>false</IsPackable>
+    <!-- WPF-impacting analyzer noise does not apply to the test assembly. -->
+    <NoWarn>$(NoWarn);CA1707;NETSDK1138</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+    <PackageReference Include="Shouldly" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\OpenUkulele.Desktop\OpenUkulele.Desktop.csproj" />
+  </ItemGroup>
+
+</Project>
