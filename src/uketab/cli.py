@@ -1,6 +1,8 @@
 """Command-line entry point: argument parsing, orchestration, exit codes.
 
     uketab arrange <input> --output-dir <dir> [--tempo BPM] [--verbose] [--debug]
+                       [--png --pdf --orientation] [--watermark T] [--lyrics F]
+                       [--progress-json --operation-id <uuid>]
 
 Exit codes:
   0  both arrangements succeeded
@@ -8,6 +10,9 @@ Exit codes:
   3  input / transcription error
   4  at least one arrangement could not be produced
   5  export error
+
+With ``--progress-json`` stdout carries only NDJSON events (see
+``progress.py``); human text and verbose logs move to stderr.
 """
 
 from __future__ import annotations
@@ -32,6 +37,7 @@ from .fallback import resolve_with_fallback
 from .input.audio import AUDIO_EXTENSIONS
 from .input.midi import MIDI_EXTENSIONS, load_midi
 from .models import Arrangement
+from .progress import ProgressReporter
 from .render.ascii import render_ascii
 from .render.gp5 import write_gp5
 from .report import build_report, write_report
@@ -76,25 +82,51 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="PATH",
         help="歌词文件（.lrc 带时间轴，或纯文本逐音节对齐旋律音），渲染到谱面上方",
     )
+    arrange_parser.add_argument(
+        "--progress-json",
+        action="store_true",
+        help="stdout 只输出 NDJSON 进度事件（供 WPF 子进程消费）；默认行为不变",
+    )
+    arrange_parser.add_argument(
+        "--operation-id",
+        default="",
+        help="--progress-json 模式下回显的操作标识，用于跨进程日志关联",
+    )
     return parser
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
+    reporter = ProgressReporter.from_args(args)
+    if reporter.enabled:
+        # stdout is a pure NDJSON channel in progress mode: no console
+        # encoding surprises for the reader, human text moves to stderr.
+        try:
+            sys.stdout.reconfigure(encoding="utf-8")
+        except (AttributeError, OSError):  # pragma: no cover - exotic streams
+            pass
+        reporter.started(args.input)
     try:
-        return _run_arrange(args, parser)
+        return _run_arrange(args, parser, reporter)
     except UketabError as error:
         if args.debug:
             raise
         print(f"错误：{error.message}", file=sys.stderr)
         if error.suggestion:
             print(f"建议：{error.suggestion}", file=sys.stderr)
+        if reporter.enabled and not reporter.finished:
+            reporter.failed(error.exit_code, error.message, error.suggestion)
         return error.exit_code
 
 
-def _run_arrange(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
-    verbose = _logger(args.verbose)
+def _run_arrange(
+    args: argparse.Namespace,
+    parser: argparse.ArgumentParser,
+    reporter: ProgressReporter | None = None,
+) -> int:
+    reporter = reporter or ProgressReporter(False, "")
+    verbose = _logger(args.verbose, sink=sys.stderr if reporter.enabled else sys.stdout)
     input_path = Path(args.input)
     suffix = input_path.suffix.lower()
     warnings: list[str] = []
@@ -108,6 +140,7 @@ def _run_arrange(args: argparse.Namespace, parser: argparse.ArgumentParser) -> i
                 "安装项目的 image extra（pip install uketab[image]），或去掉 --png/--pdf",
             )
 
+    reporter.progress("input", 5, "正在读取输入")
     if suffix in MIDI_EXTENSIONS:
         events, tempo_bpm, time_signature, midi_warnings = load_midi(input_path)
         warnings.extend(midi_warnings)
@@ -120,6 +153,7 @@ def _run_arrange(args: argparse.Namespace, parser: argparse.ArgumentParser) -> i
     elif suffix in AUDIO_EXTENSIONS:
         from .input.audio import load_audio
 
+        reporter.progress("transcribe", 15, "正在转写音频")
         events, audio_warnings = load_audio(input_path)
         warnings.extend(audio_warnings)
         time_signature = (4, 4)
@@ -160,11 +194,14 @@ def _run_arrange(args: argparse.Namespace, parser: argparse.ArgumentParser) -> i
     grid_hard = SIXTEENTH if use_sixteenths else EIGHTH
     verbose(f"量化网格: easy=1/8, hard={'1/16' if use_sixteenths else '1/8'}")
 
+    reporter.progress("normalize", 25, "正在量化与节拍归一")
     normalized_easy = normalize_events(events, tempo_bpm, EIGHTH)
     normalized_hard = normalize_events(events, tempo_bpm, grid_hard)
 
     results: dict[str, tuple[Arrangement, object] | None] = {"easy": None, "hard": None}
     failures: list[str] = []
+
+    reporter.progress("arrange", 50, "正在编配与求解指法")
 
     for difficulty, normalized, grid in (
         ("easy", normalized_easy, EIGHTH),
@@ -210,6 +247,7 @@ def _run_arrange(args: argparse.Namespace, parser: argparse.ArgumentParser) -> i
     if args.lyrics:
         from .lyrics import attach
 
+        reporter.progress("lyrics", 65, "正在对齐歌词")
         lyric_warnings_done = False
         for difficulty in ("easy", "hard"):
             entry = results[difficulty]
@@ -223,6 +261,7 @@ def _run_arrange(args: argparse.Namespace, parser: argparse.ArgumentParser) -> i
 
     output_dir = _prepare_output_dir(Path(args.output_dir))
     stem = input_path.stem
+    reporter.progress("export", 85, "正在导出文件")
     temp_dir = Path(tempfile.mkdtemp(prefix=".uketab-tmp-", dir=output_dir.parent))
     try:
         for difficulty in ("easy", "hard"):
@@ -289,10 +328,25 @@ def _run_arrange(args: argparse.Namespace, parser: argparse.ArgumentParser) -> i
         raise
 
     verbose(f"输出目录: {output_dir}")
+    report_path = str(output_dir / f"{stem}-report.json")
     if failures:
-        print(f"完成（{ '、'.join(failures) } 版本不可生成，退出码 {EXIT_ARRANGE}）")
+        summary = f"{'、'.join(failures)} 版本不可生成，详见报告失败小节列表"
+        if reporter.enabled:
+            reporter.failed(
+                EXIT_ARRANGE,
+                summary,
+                "打开报告查看失败小节；或降低要求改用旋律更单一的输入",
+                code="arrangement_partial",
+                output_dir=str(output_dir),
+                report_path=report_path,
+            )
+        else:
+            print(f"完成（{summary}，退出码 {EXIT_ARRANGE}）")
         return EXIT_ARRANGE
-    print(f"完成：简易版与困难版均已生成于 {output_dir}")
+    if reporter.enabled:
+        reporter.completed(str(output_dir), report_path, EXIT_OK)
+    else:
+        print(f"完成：简易版与困难版均已生成于 {output_dir}")
     return EXIT_OK
 
 
@@ -321,10 +375,10 @@ def _publish(temp_dir: Path, output_dir: Path) -> None:
     os.replace(temp_dir, output_dir)
 
 
-def _logger(enabled: bool):
+def _logger(enabled: bool, sink=None):
     def log(message: str) -> None:
         if enabled:
-            print(f"[uketab] {message}")
+            print(f"[uketab] {message}", file=sink)
 
     return log
 
