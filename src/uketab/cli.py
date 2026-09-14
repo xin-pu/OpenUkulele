@@ -160,10 +160,17 @@ def _run_arrange(
             warnings.append(f"已用 --tempo {args.tempo:g} 覆盖 MIDI 自带速度")
     elif suffix in AUDIO_EXTENSIONS:
         from .input.audio import load_audio
+        from .melody import select_melody
 
         reporter.progress("transcribe", 15, "正在转写音频")
         events, audio_warnings = load_audio(input_path)
+        raw_event_count = len(events)
+        events = select_melody(events)
         warnings.extend(audio_warnings)
+        if len(events) < raw_event_count:
+            warnings.append(
+                f"已从 {raw_event_count} 个音频候选中筛选出 {len(events)} 个连续旋律候选"
+            )
         time_signature = (4, 4)
         source = "audio"
         if args.tempo is not None:
