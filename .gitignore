@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.venv/
+.pytest_cache/
+
+# UkeTab outputs
+output/
+output-*/
+
+# User media: local acceptance samples only, never commit (see design doc)
+*.mp3
+*.m4a
+*.ogg
+*.wav
+*.mgg
+
+# OS
+Thumbs.db
+.DS_Store
+.uketab-tmp-*/
+
+# transcribed lyrics (copyrighted text, local only)
+lyrics-asr.lrc
+*.lrc
