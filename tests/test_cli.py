@@ -61,6 +61,24 @@ def test_unplayable_for_both_exits_arrange(tmp_path):
     assert report["arrangements"] == {}
 
 
+def test_transpose_rescues_low_melody(tmp_path):
+    # An octave-below melody fails without transposition, succeeds with +12.
+    path = tmp_path / "low.mid"
+    write_midi(path, [(48, 0, 1), (50, 1, 1), (52, 2, 1), (53, 3, 1)])
+    assert run("arrange", str(path), "--output-dir", str(tmp_path / "o1")) == EXIT_ARRANGE
+
+    out = tmp_path / "o2"
+    code = run("arrange", str(path), "--output-dir", str(out), "--transpose", "12")
+    assert code == EXIT_OK
+    report = json.loads((out / "low-report.json").read_text(encoding="utf-8"))
+    assert any("+12" in w for w in report["warnings"])
+
+
+def test_transpose_out_of_range_rejected(tmp_path, twinkle_mid):
+    assert run("arrange", str(twinkle_mid), "--output-dir", str(tmp_path / "o"),
+               "--transpose", "99") == EXIT_USAGE
+
+
 def test_nonempty_output_dir_rejected(tmp_path, twinkle_mid):
     out = tmp_path / "out"
     out.mkdir()
@@ -230,3 +248,22 @@ def test_mocked_audio_default_tempo_warning(tmp_path, monkeypatch):
     assert report["input"]["tempo_bpm"] == 80
     assert report["input"]["tempo_provided"] is False
     assert any("默认 80" in w for w in report["warnings"])
+
+
+def test_audio_input_filters_simultaneous_candidates_to_melody(tmp_path, monkeypatch):
+    bp = types.ModuleType("basic_pitch")
+    bp.ICASSP_2022_MODEL_PATH = "/fake/models/nmp"
+    inference = types.ModuleType("basic_pitch.inference")
+    inference.predict = lambda *args, **kwargs: (
+        object(), None, [(0.0, 0.5, 72, 0.9), (0.0, 0.05, 84, 0.2)]
+    )
+    monkeypatch.setitem(sys.modules, "basic_pitch", bp)
+    monkeypatch.setitem(sys.modules, "basic_pitch.inference", inference)
+    audio = tmp_path / "voice.wav"
+    audio.write_bytes(b"RIFF" + b"\x00" * 32)
+    out = tmp_path / "out"
+
+    assert run("arrange", str(audio), "--tempo", "96", "--output-dir", str(out)) == EXIT_OK
+
+    report = json.loads((out / "voice-report.json").read_text(encoding="utf-8"))
+    assert report["input"]["events"] == 1

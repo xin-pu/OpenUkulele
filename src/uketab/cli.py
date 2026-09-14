@@ -27,6 +27,7 @@ from pathlib import Path
 from . import __version__
 from .arrangement import EASY_PROFILE, arrange, hard_profile
 from .errors import (
+    ArrangementError,
     EXIT_ARRANGE,
     EXIT_EXPORT,
     EXIT_OK,
@@ -81,6 +82,13 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         metavar="PATH",
         help="歌词文件（.lrc 带时间轴，或纯文本逐音节对齐旋律音），渲染到谱面上方",
+    )
+    arrange_parser.add_argument(
+        "--transpose",
+        type=int,
+        default=0,
+        metavar="SEMITONES",
+        help="将所有输入音符统一移调 N 个半音（可为负）；超出琴音域的音按八度归一并在报告警告",
     )
     arrange_parser.add_argument(
         "--progress-json",
@@ -152,10 +160,17 @@ def _run_arrange(
             warnings.append(f"已用 --tempo {args.tempo:g} 覆盖 MIDI 自带速度")
     elif suffix in AUDIO_EXTENSIONS:
         from .input.audio import load_audio
+        from .melody import select_melody
 
         reporter.progress("transcribe", 15, "正在转写音频")
         events, audio_warnings = load_audio(input_path)
+        raw_event_count = len(events)
+        events = select_melody(events)
         warnings.extend(audio_warnings)
+        if len(events) < raw_event_count:
+            warnings.append(
+                f"已从 {raw_event_count} 个音频候选中筛选出 {len(events)} 个连续旋律候选"
+            )
         time_signature = (4, 4)
         source = "audio"
         if args.tempo is not None:
@@ -175,6 +190,12 @@ def _run_arrange(
     verbose(f"速度 {tempo_bpm:g} BPM，拍号 {time_signature[0]}/{time_signature[1]}")
 
     from .tuning import playable_pitch_range
+
+    if args.transpose:
+        if not -24 <= args.transpose <= 24:
+            raise UsageError("--transpose 超出范围", "半音数必须在 -24 到 +24 之间")
+        events, _ = apply_transpose(events, args.transpose)
+        warnings.append(f"已整体移调 {args.transpose:+d} 个半音（音程关系保持不变）")
 
     lowest, highest = playable_pitch_range()
     below = sum(1 for e in events if e.pitch < lowest)
@@ -354,6 +375,28 @@ def pitch_label(pitch: int) -> str:
     from .tuning import pitch_name
 
     return pitch_name(pitch)
+
+
+def apply_transpose(events, semitones: int):
+    """Shift every event by one interval-preserving number of semitones.
+
+    A global transposition is only valid when every resulting pitch is in the
+    instrument range.  Per-note octave folding is intentionally forbidden: it
+    changes melodic and harmonic intervals.
+    """
+    from dataclasses import replace
+
+    from .tuning import playable_pitch_range
+
+    lowest, highest = playable_pitch_range()
+    out = [replace(event, pitch=event.pitch + semitones) for event in events]
+    outside = [event.pitch for event in out if not lowest <= event.pitch <= highest]
+    if outside:
+        raise ArrangementError(
+            "整体移调后仍有音符超出尤克里里音域",
+            "改用较小的移调值、提供旋律更单一的输入，或在后续编辑中手动改写超域音",
+        )
+    return out, 0
 
 
 def _prepare_output_dir(output_dir: Path) -> Path:
