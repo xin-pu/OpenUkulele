@@ -157,6 +157,25 @@ def test_no_png_by_default(tmp_path, twinkle_mid):
     assert not [p for p in out.iterdir() if p.suffix == ".png"]
 
 
+def test_lyrics_flag_renders_and_warns(tmp_path, twinkle_mid):
+    import pytest
+
+    pytest.importorskip("matplotlib")
+    lrc = tmp_path / "words.lrc"
+    lrc.write_text("[00:00.00]一闪一闪亮晶晶\n", encoding="utf-8")
+    out = tmp_path / "out"
+    code = run(
+        "arrange", str(twinkle_mid), "--output-dir", str(out), "--png", "--lyrics", str(lrc)
+    )
+    assert code == EXIT_OK
+    assert (out / "twinkle-easy.png").exists()
+    text = (out / "twinkle-easy.txt").read_text(encoding="utf-8")
+    assert "闪" in text  # lyric row inside the ASCII tab
+    # 14 melody notes vs 8 syllables -> "部分音符无词" warning in the report
+    report = json.loads((out / "twinkle-report.json").read_text(encoding="utf-8"))
+    assert any("无词" in w for w in report["warnings"])
+
+
 def test_mocked_audio_end_to_end(tmp_path, monkeypatch):
     bp = types.ModuleType("basic_pitch")
     bp.ICASSP_2022_MODEL_PATH = "/fake/models/nmp"

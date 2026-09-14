@@ -59,6 +59,11 @@ LEFT_LABEL_W = 2.8  # room for the string-name labels at each staff start
 STAFF_SPAN_TOP = 0.55  # units above the top string line
 STAFF_SPAN_BOTTOM = 0.55  # units below the bottom string line (before lane)
 
+#: lyric lane sits above the staff; bar numbers/position box move higher when used
+LYRIC_Y = 1.45  # syllable baseline height above the top string line
+LYRIC_CLEARANCE = 1.75  # extra top space per row when lyrics are present
+LYRIC_COLOR = "#2f2f2b"
+
 #: soft, eye-friendly palette (top, bottom of a faint vertical wash)
 PAGE_BG_TOP = "#fbfaf5"
 PAGE_BG_BOTTOM = "#f3f1e6"
@@ -285,7 +290,9 @@ class _Geometry:
         return self.usable_w_units
 
 
-def _geometry(arrangement: Arrangement, orientation: str, unit_mm: float) -> _Geometry:
+def _geometry(
+    arrangement: Arrangement, orientation: str, unit_mm: float, has_lyrics: bool = False
+) -> _Geometry:
     if orientation == "portrait":
         usable_w_mm, usable_h_mm = A4_SHORT / MM - 2 * 18, A4_LONG / MM - 16 - 14
         header_mm = 15
@@ -294,9 +301,10 @@ def _geometry(arrangement: Arrangement, orientation: str, unit_mm: float) -> _Ge
         header_mm = 14
     # subtract the label gutter from staff width
     usable_w_mm -= LEFT_LABEL_W * unit_mm
-    # row height = staff band + rhythm lane depth + header clearance, + gap
+    # row height = staff band + rhythm lane depth + header clearance (+ lyric line)
     lane_depth = max(HEAD_Y + STEM, RHYTHM_BOTTOM)  # deepest element below staff
-    row_height_units = (3.0 * STRING_SPACING + lane_depth + 1.3)  # + bar overhang
+    top_clearance = 1.3 + (LYRIC_CLEARANCE if has_lyrics else 0.0)
+    row_height_units = 3.0 * STRING_SPACING + lane_depth + top_clearance
     row_gap = 2.4  # extra vertical breathing room between systems
     return _Geometry(
         usable_w_units=usable_w_mm / unit_mm,
@@ -325,9 +333,14 @@ def render_png(
     orientation: str = "landscape",
     unit_mm: float = 2.3,
     watermark: str = DEFAULT_WATERMARK,
+    lyrics_map: dict[Fraction, str] | None = None,
 ) -> list[Path]:
-    """Draw the arrangement onto A4 page images. Returns written paths."""
-    geometry = _geometry(arrangement, orientation, unit_mm)
+    """Draw the arrangement onto A4 page images. Returns written paths.
+
+    ``lyrics_map`` (beat -> syllable, melody onsets only) adds a lyric line
+    above every staff.
+    """
+    geometry = _geometry(arrangement, orientation, unit_mm, has_lyrics=bool(lyrics_map))
     measures = _build_measures(arrangement)
     rows = _pack_rows(measures, geometry.usable_w_units)
     pages = [rows[i : i + geometry.max_rows] for i in range(0, len(rows), geometry.max_rows)] or [[]]
@@ -341,7 +354,8 @@ def render_png(
             else base.with_name(f"{base.stem}-p{index:02d}{base.suffix}")
         )
         fig = _figure(
-            page_rows, arrangement, tuning, title, geometry, orientation, index, len(pages), watermark
+            page_rows, arrangement, tuning, title, geometry, orientation, index, len(pages),
+            watermark, lyrics_map,
         )
         fig.savefig(target, dpi=DPI)
         plt.close(fig)
@@ -357,11 +371,12 @@ def render_pdf(
     orientation: str = "landscape",
     unit_mm: float = 2.3,
     watermark: str = DEFAULT_WATERMARK,
+    lyrics_map: dict[Fraction, str] | None = None,
 ) -> Path:
     """Multi-page A4 PDF from the same engine as :func:`render_png`."""
     from matplotlib.backends.backend_pdf import PdfPages
 
-    geometry = _geometry(arrangement, orientation, unit_mm)
+    geometry = _geometry(arrangement, orientation, unit_mm, has_lyrics=bool(lyrics_map))
     measures = _build_measures(arrangement)
     rows = _pack_rows(measures, geometry.usable_w_units)
     pages = [rows[i : i + geometry.max_rows] for i in range(0, len(rows), geometry.max_rows)] or [[]]
@@ -370,7 +385,7 @@ def render_pdf(
         for index, page_rows in enumerate(pages, start=1):
             fig = _figure(
                 page_rows, arrangement, tuning, title, geometry, orientation, index, len(pages),
-                watermark,
+                watermark, lyrics_map,
             )
             pdf.savefig(fig)
             plt.close(fig)
@@ -380,6 +395,7 @@ def render_pdf(
 def _figure(
     page_rows, arrangement, tuning, title, geometry, orientation, index, total,
     watermark: str = DEFAULT_WATERMARK,
+    lyrics_map: dict[Fraction, str] | None = None,
 ) -> "plt.Figure":
     if orientation == "portrait":
         fig_w_in, fig_h_in, margin_in, top_in = A4_SHORT, A4_LONG, 18 * MM, 16 * MM
@@ -429,6 +445,7 @@ def _figure(
             ax, row, y, geometry,
             show_position_box=row_index == 0,
             is_last_row=row_index == len(page_rows) - 1 and index == total,
+            lyrics_map=lyrics_map,
         )
         y += pitch
     return fig
@@ -474,11 +491,14 @@ def _draw_row(
     geometry: _Geometry,
     show_position_box: bool = False,
     is_last_row: bool = False,
+    lyrics_map: dict[Fraction, str] | None = None,
 ) -> None:
     string_y = {s: top + (s - 1) * STRING_SPACING for s in (1, 2, 3, 4)}
     top_line, bottom_line = string_y[1], string_y[4]
     span_top, span_bottom = _bar_span(top_line, bottom_line)
     lw = geometry.lw
+    has_lyrics = bool(lyrics_map)
+    number_y = top_line - (LYRIC_Y + 0.55 if has_lyrics else 0.5)
 
     # string-name labels (A/E/C/G) in the left gutter of every staff
     label_y = {s: string_y[s] for s in (1, 2, 3, 4)}
@@ -508,10 +528,18 @@ def _draw_row(
                 _draw_fret(
                     ax, cx + cell.width / 2, string_y[note.fingering.string], note, geometry,
                 )
+            if lyrics_map:
+                syllable = lyrics_map.get(cell.slot)
+                if syllable:
+                    ax.text(
+                        cx + cell.width / 2, top_line - LYRIC_Y, syllable,
+                        fontsize=geometry.meta_pt * 1.25, color=LYRIC_COLOR,
+                        ha="center", va="center", zorder=4,
+                    )
         # bar line + measure number
         bar_x = base_x + measure.width - BAR_LINE_GAP
         ax.vlines(bar_x, span_top, span_bottom, color=BAR_COLOR, lw=lw * 1.4)
-        ax.text(bar_x - 0.25, span_top - 0.18, str(measure.bar),
+        ax.text(bar_x - 0.25, number_y - (0.28 if has_lyrics else 0.0), str(measure.bar),
                 fontsize=geometry.bar_no_pt, color=LABEL_COLOR, va="bottom", ha="right")
         last_bar_x = bar_x
         x0 = base_x + measure.width
@@ -534,13 +562,15 @@ def _draw_row(
         if note.fingering.fret >= 2
     ]
     if frets and show_position_box:
-        _draw_position_box(ax, min(frets), top_line, geometry)
+        _draw_position_box(ax, min(frets), top_line, geometry, has_lyrics=has_lyrics)
 
 
-def _draw_position_box(ax, fret: int, top_line: float, geometry: _Geometry) -> None:
+def _draw_position_box(
+    ax, fret: int, top_line: float, geometry: _Geometry, has_lyrics: bool = False
+) -> None:
     """Small rounded box above the row start naming the hand position."""
     ax.text(
-        0.3, top_line - 0.45, f"{fret}",
+        0.3, top_line - (0.45 + (LYRIC_Y + 0.55 if has_lyrics else 0.0)), f"{fret}",
         fontsize=geometry.bar_no_pt * 1.05, color="#7a7468",
         ha="left", va="bottom",
         bbox=dict(boxstyle="round,pad=0.28", fc="#eef0e4", ec="#b9b8a8", lw=geometry.lw * 0.8),

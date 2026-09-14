@@ -31,6 +31,9 @@ python -m venv .venv
 # 附带 A4 图片谱（需 image extra；--pdf 出多页 PDF，--orientation portrait 竖版，
 # --watermark "你的名字" 自定义水印，默认 pu.xin@outlook.com，传空串关闭）
 .venv\Scripts\uketab arrange .\samples\melody.mid --output-dir .\output --png
+
+# 歌词对齐到旋律音，渲染在谱面上方（.lrc 带时间轴最准；纯文本按音节顺序贴）
+.venv\Scripts\uketab arrange .\recording.m4a --tempo 80 --output-dir .\output --png --lyrics .\song.lrc
 ```
 
 输出目录必须不存在或为空；工具写入临时目录后原子移动，避免半成品。
@@ -43,7 +46,7 @@ python -m venv .venv
 | `{stem}-easy.txt` / `{stem}-hard.txt` | 四行 ASCII tab（A/E/C/G），含速度、调弦、小节线 |
 | `{stem}-easy.gp5` / `{stem}-hard.gp5` | 四弦 GP5（调弦 A4/E4/C4/G4，15 品，GM 尤克里里音色） |
 | `{stem}-report.json` | 输入元数据、量化参数、两版统计、校验问题、警告 |
-| `{stem}-easy.png` / `{stem}-hard.png` | （`--png`）A4 图片谱：淡雅渐变底、水印署名、弦名 A/E/C/G、把位框、**标准节奏记谱（符头/符干/符杠连杠/附点/连音线，旋律朝上低音朝下）**、角色着色 |
+| `{stem}-easy.png` / `{stem}-hard.png` | （`--png`）A4 图片谱：淡雅渐变底、水印署名、**歌词行（`--lyrics`）**、弦名 A/E/C/G、把位框、**标准节奏记谱（符头/符干/符杠连杠/附点/连音线，旋律朝上低音朝下）**、角色着色 |
 | `{stem}-easy.pdf` / `{stem}-hard.pdf` | （`--pdf`）A4 多页 PDF |
 
 ### 退出码

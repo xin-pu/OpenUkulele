@@ -70,6 +70,12 @@ def build_parser() -> argparse.ArgumentParser:
         default="pu.xin@outlook.com",
         help="图片谱水印文字（默认 pu.xin@outlook.com）；传空串 --watermark \"\" 可关闭",
     )
+    arrange_parser.add_argument(
+        "--lyrics",
+        default=None,
+        metavar="PATH",
+        help="歌词文件（.lrc 带时间轴，或纯文本逐音节对齐旋律音），渲染到谱面上方",
+    )
     return parser
 
 
@@ -200,6 +206,21 @@ def _run_arrange(args: argparse.Namespace, parser: argparse.ArgumentParser) -> i
             f"难度分 {report.difficulty_score}"
         )
 
+    lyrics_by_difficulty: dict = {}
+    if args.lyrics:
+        from .lyrics import attach
+
+        lyric_warnings_done = False
+        for difficulty in ("easy", "hard"):
+            entry = results[difficulty]
+            if entry is None:
+                continue
+            mapping, lyric_warnings = attach(args.lyrics, list(entry[0].notes), tempo_bpm)
+            lyrics_by_difficulty[difficulty] = mapping
+            if not lyric_warnings_done:
+                warnings.extend(lyric_warnings)
+                lyric_warnings_done = True
+
     output_dir = _prepare_output_dir(Path(args.output_dir))
     stem = input_path.stem
     temp_dir = Path(tempfile.mkdtemp(prefix=".uketab-tmp-", dir=output_dir.parent))
@@ -209,7 +230,8 @@ def _run_arrange(args: argparse.Namespace, parser: argparse.ArgumentParser) -> i
             if entry is None:
                 continue
             arrangement, _ = entry
-            ascii_text = render_ascii(arrangement)
+            lyrics_map = lyrics_by_difficulty.get(difficulty)
+            ascii_text = render_ascii(arrangement, lyrics_map=lyrics_map)
             (temp_dir / f"{stem}-{difficulty}.txt").write_text(ascii_text, encoding="utf-8")
             write_gp5(arrangement, temp_dir / f"{stem}-{difficulty}.gp5", title=stem)
             written_files = f"{stem}-{difficulty}.txt / {stem}-{difficulty}.gp5"
@@ -222,6 +244,7 @@ def _run_arrange(args: argparse.Namespace, parser: argparse.ArgumentParser) -> i
                     title=stem,
                     orientation=args.orientation,
                     watermark=args.watermark,
+                    lyrics_map=lyrics_map,
                 )
                 written_files += " / " + ", ".join(p.name for p in png_paths)
             if args.pdf:
@@ -233,6 +256,7 @@ def _run_arrange(args: argparse.Namespace, parser: argparse.ArgumentParser) -> i
                     title=stem,
                     orientation=args.orientation,
                     watermark=args.watermark,
+                    lyrics_map=lyrics_map,
                 )
                 written_files += f" / {stem}-{difficulty}.pdf"
             verbose(f"写出 {written_files}")

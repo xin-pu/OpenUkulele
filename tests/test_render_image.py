@@ -59,6 +59,24 @@ def test_portrait_and_landscape_both_work(tmp_path):
         assert paths and paths[0].stat().st_size > 10_000
 
 
+def test_render_with_lyrics_smoke(tmp_path):
+    arr = arrangement_of([(tp(0, 60), 3, 0), (tp(1, 62), 3, 2), (tp(2, 64), 2, 0)])
+    paths = render_png(
+        arr, tmp_path / "lyric.png",
+        lyrics_map={Fraction(0): "一", Fraction(1): "切", Fraction(2): "风"},
+    )
+    assert paths and paths[0].stat().st_size > 12_000
+
+
+def test_ascii_with_lyrics_row(tmp_path):
+    from uketab.render.ascii import render_ascii
+
+    arr = arrangement_of([(tp(0, 60), 3, 0), (tp(1, 62), 3, 2)])
+    text = render_ascii(arr, lyrics_map={Fraction(0): "春", Fraction(1): "风"})
+    lines = [line for line in text.splitlines() if line.strip()]
+    assert any("春" in line and "风" in line for line in lines)  # lyric row present
+
+
 def test_decompose_duration_to_standard_noteheads():
     assert _decompose_duration(Fraction(1)) == [(Fraction(1), False)]          # quarter
     assert _decompose_duration(Fraction(2)) == [(Fraction(2), False)]          # half
