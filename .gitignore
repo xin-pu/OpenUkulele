@@ -33,3 +33,5 @@ obj/
 *.user
 .vs/
 TestResults/
+
+preview-transposed/
