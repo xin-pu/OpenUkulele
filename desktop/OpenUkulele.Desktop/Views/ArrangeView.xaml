@@ -1,0 +1,165 @@
+<UserControl x:Class="OpenUkulele.Desktop.Views.ArrangeView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+             xmlns:conv="clr-namespace:OpenUkulele.Desktop.Converters"
+             xmlns:vm="clr-namespace:OpenUkulele.Desktop.ViewModels">
+    <UserControl.Resources>
+        <conv:BoolToVisibilityConverter x:Key="BoolVis" />
+        <conv:FileToImageSourceConverter x:Key="FileToImage" />
+        <conv:NonEmptyStringToVisibilityConverter x:Key="NonEmptyVis" />
+
+        <!-- One template shared by the two difficulty tabs; commands reach the
+             parent ArrangeViewModel via the TabControl DataContext. -->
+        <DataTemplate x:Key="DiffTemplate" DataType="{x:Type vm:DifficultyViewModel}">
+            <Grid Margin="8">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="260" />
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+
+                <TextBlock Grid.Row="0" Grid.ColumnSpan="2" Text="{Binding SummaryText}" FontWeight="SemiBold" Margin="0,0,0,8" />
+
+                <StackPanel Grid.Row="1" Grid.ColumnSpan="2" Orientation="Horizontal" Margin="0,0,0,8">
+                    <ui:Button Content="打开 PNG"
+                               Command="{Binding DataContext.OpenFileCommand, RelativeSource={RelativeSource AncestorType=TabControl}}"
+                               CommandParameter="{Binding PreviewPath}"
+                               IsEnabled="{Binding HasPreview}" Margin="0,0,8,0" />
+                    <ui:Button Content="打开 PDF"
+                               Command="{Binding DataContext.OpenFileCommand, RelativeSource={RelativeSource AncestorType=TabControl}}"
+                               CommandParameter="{Binding PdfPath}"
+                               IsEnabled="{Binding HasOutput}" Margin="0,0,8,0" />
+                    <ui:Button Content="打开 GP5"
+                               Command="{Binding DataContext.OpenFileCommand, RelativeSource={RelativeSource AncestorType=TabControl}}"
+                               CommandParameter="{Binding Gp5Path}"
+                               IsEnabled="{Binding HasOutput}" Margin="0,0,8,0" />
+                    <ui:Button Content="打开输出文件夹"
+                               Command="{Binding DataContext.OpenOutputFolderCommand, RelativeSource={RelativeSource AncestorType=TabControl}}" />
+                </StackPanel>
+
+                <TextBlock Grid.Row="2" Grid.ColumnSpan="2" Text="未生成图片谱，可打开 TXT/GP5。"
+                           FontSize="12" Opacity="0.7" VerticalAlignment="Top"
+                           Visibility="{Binding PreviewPath, Converter={StaticResource NonEmptyVis}, ConverterParameter=invert}" />
+                <ScrollViewer Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="2"
+                              Visibility="{Binding PreviewPath, Converter={StaticResource NonEmptyVis}}"
+                              HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
+                    <Image Source="{Binding PreviewPath, Converter={StaticResource FileToImage}}"
+                           Stretch="Uniform" HorizontalAlignment="Left" MaxHeight="360" />
+                </ScrollViewer>
+            </Grid>
+        </DataTemplate>
+    </UserControl.Resources>
+
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <StackPanel Margin="4">
+
+            <!-- Input card -->
+            <ui:Card Margin="0,0,0,12">
+                <StackPanel>
+                    <TextBlock Text="输入" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,8" />
+                    <Grid Margin="0,0,0,6">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="96" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="输入文件" VerticalAlignment="Center" />
+                        <TextBox Grid.Column="1" Text="{Binding InputPath, Mode=OneWay}" IsReadOnly="True" Margin="0,0,8,0" />
+                        <ui:Button Grid.Column="2" Content="浏览…" Command="{Binding PickInputCommand}" />
+                    </Grid>
+                    <Grid Margin="0,0,0,6">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="96" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="歌词（可选）" VerticalAlignment="Center" />
+                        <TextBox Grid.Column="1" Text="{Binding LyricsPath, Mode=OneWay}" IsReadOnly="True" Margin="0,0,8,0" />
+                        <ui:Button Grid.Column="2" Content="浏览…" Command="{Binding PickLyricsCommand}" />
+                    </Grid>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="96" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="输出文件夹" VerticalAlignment="Center" />
+                        <TextBox Grid.Column="1" Text="{Binding OutputDirectory, Mode=OneWay}" IsReadOnly="True" Margin="0,0,8,0" />
+                        <ui:Button Grid.Column="2" Content="浏览…" Command="{Binding PickOutputCommand}" />
+                    </Grid>
+                    <TextBlock Text="{Binding InputHint}" FontSize="11" Opacity="0.7" Margin="0,6,0,0" />
+                </StackPanel>
+            </ui:Card>
+
+            <!-- Options card -->
+            <ui:Card Margin="0,0,0,12">
+                <StackPanel>
+                    <TextBlock Text="选项" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,8" />
+                    <WrapPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,24,6">
+                            <TextBlock Text="Tempo" VerticalAlignment="Center" Margin="0,0,8,0" />
+                            <TextBox Width="72" Text="{Binding TempoText, UpdateSourceTrigger=PropertyChanged}" />
+                            <TextBlock Text="BPM（40–240，留空自动）" VerticalAlignment="Center" Margin="6,0,0,0" FontSize="11" Opacity="0.7" />
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,24,6">
+                            <ui:ToggleSwitch Content="PNG" IsChecked="{Binding ExportPng}" />
+                            <ui:ToggleSwitch Content="PDF" IsChecked="{Binding ExportPdf}" Margin="16,0,0,0" />
+                            <ui:ToggleSwitch Content="竖版" IsChecked="{Binding Portrait}" Margin="16,0,0,0" />
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                            <TextBlock Text="水印" VerticalAlignment="Center" Margin="0,0,8,0" />
+                            <TextBox Width="200" Text="{Binding WatermarkText, UpdateSourceTrigger=PropertyChanged}" />
+                        </StackPanel>
+                    </WrapPanel>
+                </StackPanel>
+            </ui:Card>
+
+            <!-- Task card -->
+            <ui:Card Margin="0,0,0,12">
+                <StackPanel>
+                    <Grid Margin="0,0,0,8">
+                        <StackPanel Orientation="Horizontal">
+                            <ui:Button Content="开始生成" Appearance="Primary" Command="{Binding GenerateCommand}"
+                                       Visibility="{Binding IsRunning, Converter={StaticResource BoolVis}, ConverterParameter=invert}" />
+                            <ui:Button Content="取消" Command="{Binding CancelCommand}" Margin="8,0,0,0"
+                                       Visibility="{Binding IsRunning, Converter={StaticResource BoolVis}}" />
+                        </StackPanel>
+                        <TextBlock HorizontalAlignment="Right" VerticalAlignment="Center"
+                                   Text="{Binding StageText}" Opacity="0.8" />
+                    </Grid>
+                    <ProgressBar Height="6" Minimum="0" Maximum="100" Value="{Binding Percent}" Margin="0,0,0,6" />
+                    <TextBlock Text="{Binding CurrentMessage}" TextWrapping="Wrap" Opacity="0.8" Margin="0,0,0,6" />
+                    <ui:InfoBar Title="{Binding ErrorTitle}"
+                                Message="{Binding ErrorDetail}"
+                                Severity="Warning"
+                                IsClosable="False"
+                                IsOpen="{Binding HasError}"
+                                Margin="0,0,0,6" />
+                    <ItemsControl ItemsSource="{Binding Warnings}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding}" FontSize="12" Foreground="#B8860B" TextWrapping="Wrap" Margin="0,1" />
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+            </ui:Card>
+
+            <!-- Result tabs -->
+            <ui:Card>
+                <StackPanel>
+                    <TextBlock Text="结果" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,8" />
+                    <TabControl MinHeight="280">
+                        <TabItem Header="简易版" Content="{Binding Easy}" ContentTemplate="{StaticResource DiffTemplate}" />
+                        <TabItem Header="困难版" Content="{Binding Hard}" ContentTemplate="{StaticResource DiffTemplate}" />
+                    </TabControl>
+                </StackPanel>
+            </ui:Card>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>
