@@ -22,3 +22,7 @@ output-*/
 Thumbs.db
 .DS_Store
 .uketab-tmp-*/
+
+# transcribed lyrics (copyrighted text, local only)
+lyrics-asr.lrc
+*.lrc
