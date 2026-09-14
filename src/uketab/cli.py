@@ -27,6 +27,7 @@ from pathlib import Path
 from . import __version__
 from .arrangement import EASY_PROFILE, arrange, hard_profile
 from .errors import (
+    ArrangementError,
     EXIT_ARRANGE,
     EXIT_EXPORT,
     EXIT_OK,
@@ -186,12 +187,8 @@ def _run_arrange(
     if args.transpose:
         if not -24 <= args.transpose <= 24:
             raise UsageError("--transpose 超出范围", "半音数必须在 -24 到 +24 之间")
-        events, folded = apply_transpose(events, args.transpose)
+        events, _ = apply_transpose(events, args.transpose)
         warnings.append(f"已整体移调 {args.transpose:+d} 个半音（音程关系保持不变）")
-        if folded:
-            warnings.append(
-                f"{folded} 个音移调后超出 C4–C6，已按整八度归位（保持音名不变）"
-            )
 
     lowest, highest = playable_pitch_range()
     below = sum(1 for e in events if e.pitch < lowest)
@@ -374,29 +371,25 @@ def pitch_label(pitch: int) -> str:
 
 
 def apply_transpose(events, semitones: int):
-    """Shift every event by the same number of semitones, preserving intervals.
+    """Shift every event by one interval-preserving number of semitones.
 
-    Notes that end up outside the instrument range are folded by whole
-    octaves (pitch names unchanged); returns ``(events, folded_count)``.
+    A global transposition is only valid when every resulting pitch is in the
+    instrument range.  Per-note octave folding is intentionally forbidden: it
+    changes melodic and harmonic intervals.
     """
     from dataclasses import replace
 
     from .tuning import playable_pitch_range
 
     lowest, highest = playable_pitch_range()
-    folded = 0
-    out = []
-    for event in events:
-        pitch = event.pitch + semitones
-        original = pitch
-        while pitch < lowest:
-            pitch += 12
-        while pitch > highest:
-            pitch -= 12
-        if pitch != original:
-            folded += 1
-        out.append(replace(event, pitch=pitch))
-    return out, folded
+    out = [replace(event, pitch=event.pitch + semitones) for event in events]
+    outside = [event.pitch for event in out if not lowest <= event.pitch <= highest]
+    if outside:
+        raise ArrangementError(
+            "整体移调后仍有音符超出尤克里里音域",
+            "改用较小的移调值、提供旋律更单一的输入，或在后续编辑中手动改写超域音",
+        )
+    return out, 0
 
 
 def _prepare_output_dir(output_dir: Path) -> Path:

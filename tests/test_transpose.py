@@ -1,6 +1,9 @@
 """--transpose unit tests."""
 
+import pytest
+
 from uketab.cli import apply_transpose
+from uketab.errors import ArrangementError
 from uketab.models import NoteEvent
 
 
@@ -15,19 +18,21 @@ def test_apply_transpose_preserves_intervals():
     assert folded == 0
 
 
-def test_apply_transpose_folds_out_of_range_octaves():
-    # 48 (C3) + 0 stays below range -> must fold up one octave to 60.
-    events = [ev(48), ev(96)]  # C3 and C7
-    out, folded = apply_transpose(events, 0)
-    assert [e.pitch for e in out] == [60, 84]  # folded into C4..C6
-    assert folded == 2
+def test_apply_transpose_rejects_notes_outside_instrument_range():
+    with pytest.raises(ArrangementError, match="超出尤克里里音域"):
+        apply_transpose([ev(48), ev(96)], 0)
 
 
-def test_apply_transpose_shift_then_fold():
-    events = [ev(70)]  # Bb4
-    out, folded = apply_transpose(events, 24)  # +2 octaves = 94 -> fold -12 -> 82
-    assert [e.pitch for e in out] == [82]
-    assert folded == 1
+def test_apply_transpose_rejects_shift_that_exceeds_instrument_range():
+    with pytest.raises(ArrangementError, match="超出尤克里里音域"):
+        apply_transpose([ev(70)], 24)
+
+
+def test_apply_transpose_rejects_mixed_range_instead_of_breaking_interval():
+    # C4 stays in range while B3 would be folded to B4 by the old algorithm,
+    # changing the original one-semitone interval into an eleven-semitone leap.
+    with pytest.raises(ArrangementError, match="超出尤克里里音域"):
+        apply_transpose([ev(59), ev(60)], 0)
 
 
 def test_apply_transpose_zero_returns_same():
