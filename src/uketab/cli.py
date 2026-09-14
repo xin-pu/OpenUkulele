@@ -83,6 +83,13 @@ def build_parser() -> argparse.ArgumentParser:
         help="歌词文件（.lrc 带时间轴，或纯文本逐音节对齐旋律音），渲染到谱面上方",
     )
     arrange_parser.add_argument(
+        "--transpose",
+        type=int,
+        default=0,
+        metavar="SEMITONES",
+        help="将所有输入音符统一移调 N 个半音（可为负）；超出琴音域的音按八度归一并在报告警告",
+    )
+    arrange_parser.add_argument(
         "--progress-json",
         action="store_true",
         help="stdout 只输出 NDJSON 进度事件（供 WPF 子进程消费）；默认行为不变",
@@ -175,6 +182,16 @@ def _run_arrange(
     verbose(f"速度 {tempo_bpm:g} BPM，拍号 {time_signature[0]}/{time_signature[1]}")
 
     from .tuning import playable_pitch_range
+
+    if args.transpose:
+        if not -24 <= args.transpose <= 24:
+            raise UsageError("--transpose 超出范围", "半音数必须在 -24 到 +24 之间")
+        events, folded = apply_transpose(events, args.transpose)
+        warnings.append(f"已整体移调 {args.transpose:+d} 个半音（音程关系保持不变）")
+        if folded:
+            warnings.append(
+                f"{folded} 个音移调后超出 C4–C6，已按整八度归位（保持音名不变）"
+            )
 
     lowest, highest = playable_pitch_range()
     below = sum(1 for e in events if e.pitch < lowest)
@@ -354,6 +371,32 @@ def pitch_label(pitch: int) -> str:
     from .tuning import pitch_name
 
     return pitch_name(pitch)
+
+
+def apply_transpose(events, semitones: int):
+    """Shift every event by the same number of semitones, preserving intervals.
+
+    Notes that end up outside the instrument range are folded by whole
+    octaves (pitch names unchanged); returns ``(events, folded_count)``.
+    """
+    from dataclasses import replace
+
+    from .tuning import playable_pitch_range
+
+    lowest, highest = playable_pitch_range()
+    folded = 0
+    out = []
+    for event in events:
+        pitch = event.pitch + semitones
+        original = pitch
+        while pitch < lowest:
+            pitch += 12
+        while pitch > highest:
+            pitch -= 12
+        if pitch != original:
+            folded += 1
+        out.append(replace(event, pitch=pitch))
+    return out, folded
 
 
 def _prepare_output_dir(output_dir: Path) -> Path:
