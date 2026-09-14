@@ -48,11 +48,16 @@ MM = 1 / 25.4
 A4_LONG, A4_SHORT = 297 * MM, 210 * MM  # inches
 DPI = 200
 
-STRING_SPACING = 1.25  # vertical distance between adjacent staff lines
+STRING_SPACING = 1.7  # vertical distance between adjacent staff lines
 EIGHTH_W = 2.35  # one eighth-note grid step, in layout units (x)
 BEAT_EXTRA_GAP = 1.7  # added to the inter-slot gap to show the beat
 BAR_LINE_GAP = 2.6  # gap on both sides of a bar line
 LEFT_LABEL_W = 2.8  # room for the string-name labels at each staff start
+
+#: vertical extents (relative to the staff band) every bar line must span so
+#: the leading line and every trailing/measure line share identical endpoints.
+STAFF_SPAN_TOP = 0.55  # units above the top string line
+STAFF_SPAN_BOTTOM = 0.55  # units below the bottom string line (before lane)
 
 #: soft, eye-friendly palette (top, bottom of a faint vertical wash)
 PAGE_BG_TOP = "#fbfaf5"
@@ -257,10 +262,12 @@ class _Geometry:
     bar_no_pt: float
     lw: float
     tie_lw: float
+    row_gap: float = 0.0  # extra breathing space between systems
 
     @property
     def max_rows(self) -> int:
-        return max(1, int((self.usable_h_units - self.header_units) // self.row_height_units))
+        pitch = self.row_height_units + self.row_gap
+        return max(1, int((self.usable_h_units - self.header_units) // pitch))
 
     @property
     def x_left(self) -> float:
@@ -279,14 +286,17 @@ def _geometry(arrangement: Arrangement, orientation: str, unit_mm: float) -> _Ge
     else:
         usable_w_mm, usable_h_mm = A4_LONG / MM - 2 * 14, A4_SHORT / MM - 13 - 12
         header_mm = 14
-    # subtract the label gutter from staff width; row height = staff + ties + clearance
+    # subtract the label gutter from staff width
     usable_w_mm -= LEFT_LABEL_W * unit_mm
-    row_height_mm = 3.0 * STRING_SPACING * unit_mm + 3.4 * unit_mm
+    # row height = staff band + rhythm lane depth + header clearance, + gap
+    lane_depth = max(HEAD_Y + STEM, RHYTHM_BOTTOM)  # deepest element below staff
+    row_height_units = (3.0 * STRING_SPACING + lane_depth + 1.3)  # + bar overhang
+    row_gap = 2.4  # extra vertical breathing room between systems
     return _Geometry(
         usable_w_units=usable_w_mm / unit_mm,
         usable_h_units=usable_h_mm / unit_mm,
         header_units=header_mm / unit_mm,
-        row_height_units=row_height_mm / unit_mm,
+        row_height_units=row_height_units,
         unit_mm=unit_mm,
         title_pt=unit_mm * 5.6,
         meta_pt=unit_mm * 3.3,
@@ -294,6 +304,7 @@ def _geometry(arrangement: Arrangement, orientation: str, unit_mm: float) -> _Ge
         bar_no_pt=unit_mm * 2.9,
         lw=1.0,
         tie_lw=unit_mm * 0.36,
+        row_gap=row_gap,
     )
 
 
@@ -390,20 +401,36 @@ def _figure(page_rows, arrangement, tuning, title, geometry, orientation, index,
                 fontsize=geometry.meta_pt, color=LABEL_COLOR, va="top", ha="right")
 
     # vertically center the systems when the page is sparse (few rows)
-    content_h = len(page_rows) * geometry.row_height_units
+    pitch = geometry.row_height_units + geometry.row_gap
+    content_h = len(page_rows) * pitch - geometry.row_gap
     slack = geometry.usable_h_units - geometry.header_units - content_h
     y = geometry.header_units + max(0.0, slack) * 0.42
     for row_index, row in enumerate(page_rows):
-        _draw_row(ax, row, y, geometry, show_position_box=row_index == 0)
-        y += geometry.row_height_units
+        _draw_row(
+            ax, row, y, geometry,
+            show_position_box=row_index == 0,
+            is_last_row=row_index == len(page_rows) - 1 and index == total,
+        )
+        y += pitch
     return fig
 
 
+def _bar_span(top_line: float, bottom_line: float) -> tuple[float, float]:
+    """Every bar line shares these exact endpoints: aligned by construction."""
+    return top_line - STAFF_SPAN_TOP, bottom_line + STAFF_SPAN_BOTTOM
+
+
 def _draw_row(
-    ax, row: _Row, top: float, geometry: _Geometry, show_position_box: bool = False
+    ax,
+    row: _Row,
+    top: float,
+    geometry: _Geometry,
+    show_position_box: bool = False,
+    is_last_row: bool = False,
 ) -> None:
     string_y = {s: top + (s - 1) * STRING_SPACING for s in (1, 2, 3, 4)}
     top_line, bottom_line = string_y[1], string_y[4]
+    span_top, span_bottom = _bar_span(top_line, bottom_line)
     lw = geometry.lw
 
     # string-name labels (A/E/C/G) in the left gutter of every staff
@@ -418,6 +445,7 @@ def _draw_row(
     # then draw stems/flags and connecting beams.
     heads: list[_Head] = []
     x0 = 0.0
+    last_bar_x = 0.0
     for measure in row.measures:
         base_x = x0
         if not measure.cells:
@@ -435,12 +463,18 @@ def _draw_row(
                 )
         # bar line + measure number
         bar_x = base_x + measure.width - BAR_LINE_GAP
-        ax.vlines(bar_x, top_line - 0.32, bottom_line + RHYTHM_BOTTOM, color=BAR_COLOR, lw=lw * 1.4)
-        ax.text(bar_x - 0.25, top_line - 0.55, str(measure.bar),
+        ax.vlines(bar_x, span_top, span_bottom, color=BAR_COLOR, lw=lw * 1.4)
+        ax.text(bar_x - 0.25, span_top - 0.18, str(measure.bar),
                 fontsize=geometry.bar_no_pt, color=LABEL_COLOR, va="bottom", ha="right")
+        last_bar_x = bar_x
         x0 = base_x + measure.width
-    # leading bar line
-    ax.vlines(0.0, top_line - 0.32, bottom_line + RHYTHM_BOTTOM, color=BAR_COLOR, lw=lw * 1.4)
+    # leading bar line: same endpoints as every other bar line
+    ax.vlines(0.0, span_top, span_bottom, color=BAR_COLOR, lw=lw * 1.4)
+
+    # final double barline closes the very last row of the piece
+    if is_last_row and row.measures and last_bar_x > 0.0:
+        ax.vlines(last_bar_x, span_top, span_bottom, color=BAR_COLOR, lw=lw * 1.4)
+        ax.vlines(last_bar_x + 0.42, span_top, span_bottom, color=BAR_COLOR, lw=lw * 2.6)
 
     _draw_rhythm_lane(ax, heads, bottom_line, geometry, Fraction(1))
 
@@ -658,7 +692,7 @@ def _draw_fret(ax, x: float, y: float, note: TabNote, geometry: _Geometry) -> No
         fontsize=geometry.fret_pt, ha="center", va="center",
         fontweight="bold" if note.note.role == "melody" else "normal",
         color=ROLE_COLORS.get(note.note.role, "#1a1a1a"),
-        bbox=dict(boxstyle="square,pad=0.16", fc=PAGE_BG_TOP, ec="none"),
+        bbox=dict(boxstyle="square,pad=0.08", fc=PAGE_BG_TOP, ec="none"),
     )
 
 
