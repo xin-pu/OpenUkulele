@@ -77,6 +77,29 @@ python -m venv .venv
 | 4 | 至少一版不可生成（报告列出失败小节） |
 | 5 | 导出错误 |
 
+## 桌面壳（WPF，实验性）
+
+`desktop/` 下是 .NET 10 WPF 应用，通过受控子进程调用本仓库的 `uketab` CLI
+（Python 仍是唯一转写/编配/导出权威，见 `docs/adr/0001-wpf-shell-invokes-python-cli.md`）：
+图形化选择输入/歌词/输出目录，实时阶段进度与取消，双版本结果预览与一键打开。
+
+```powershell
+# 前置：.NET 10 SDK + 已按上文安装并带 image extra 的 venv
+cd desktop
+dotnet restore
+dotnet run --project OpenUkulele.Desktop    # 启动主窗口
+dotnet test                                  # 26 项 xUnit（含真实 python 进程集成测试）
+```
+
+配置在 `desktop/OpenUkulele.Desktop/appsettings.json`：`UkeTab.PythonExecutable`
+（指向带 `uketab` 的 venv python，支持相对应用目录的路径或裸命令名）、
+`Module`（默认 `uketab`）、`ProcessTimeoutSeconds`（30–900，超时杀整棵进程树）。
+
+CLI 侧配套新增 `--progress-json` / `--operation-id`：stdout 变为纯 NDJSON
+进度事件（阶段 vocabulary input/transcribe/normalize/arrange/lyrics/export，
+百分比单调不减，终结 completed/failed 事件带稳定错误码与报告路径）。不传该
+参数时 CLI 行为完全不变。
+
 ## 难度预设
 
 - **简易**：只保留旋律 + 拍 1/拍 3 上的低音；开放弦或 0–5 品；同时至多 2 音；
