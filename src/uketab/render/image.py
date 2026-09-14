@@ -69,6 +69,12 @@ TICK_COLOR = "#a8a294"
 LABEL_COLOR = "#8a8477"
 TITLE_COLOR = "#2f2f2b"
 
+#: watermark styling (email shown both as a large faint diagonal and a signature)
+WATERMARK_COLOR = "#4a463c"
+WATERMARK_DIAG_ALPHA = 0.06
+WATERMARK_SIG_ALPHA = 0.62
+DEFAULT_WATERMARK = "pu.xin@outlook.com"
+
 STRING_LABELS = {1: "A", 2: "E", 3: "C", 4: "G"}
 ROLE_COLORS = {"melody": "#1a1a1a", "bass": "#0f6aa5", "harmony": "#8a8a8a"}
 
@@ -318,6 +324,7 @@ def render_png(
     title: str | None = None,
     orientation: str = "landscape",
     unit_mm: float = 2.3,
+    watermark: str = DEFAULT_WATERMARK,
 ) -> list[Path]:
     """Draw the arrangement onto A4 page images. Returns written paths."""
     geometry = _geometry(arrangement, orientation, unit_mm)
@@ -333,7 +340,9 @@ def render_png(
             if len(pages) == 1
             else base.with_name(f"{base.stem}-p{index:02d}{base.suffix}")
         )
-        fig = _figure(page_rows, arrangement, tuning, title, geometry, orientation, index, len(pages))
+        fig = _figure(
+            page_rows, arrangement, tuning, title, geometry, orientation, index, len(pages), watermark
+        )
         fig.savefig(target, dpi=DPI)
         plt.close(fig)
         written.append(target)
@@ -347,6 +356,7 @@ def render_pdf(
     title: str | None = None,
     orientation: str = "landscape",
     unit_mm: float = 2.3,
+    watermark: str = DEFAULT_WATERMARK,
 ) -> Path:
     """Multi-page A4 PDF from the same engine as :func:`render_png`."""
     from matplotlib.backends.backend_pdf import PdfPages
@@ -358,13 +368,19 @@ def render_pdf(
     target = Path(path)
     with PdfPages(str(target)) as pdf:
         for index, page_rows in enumerate(pages, start=1):
-            fig = _figure(page_rows, arrangement, tuning, title, geometry, orientation, index, len(pages))
+            fig = _figure(
+                page_rows, arrangement, tuning, title, geometry, orientation, index, len(pages),
+                watermark,
+            )
             pdf.savefig(fig)
             plt.close(fig)
     return target
 
 
-def _figure(page_rows, arrangement, tuning, title, geometry, orientation, index, total) -> "plt.Figure":
+def _figure(
+    page_rows, arrangement, tuning, title, geometry, orientation, index, total,
+    watermark: str = DEFAULT_WATERMARK,
+) -> "plt.Figure":
     if orientation == "portrait":
         fig_w_in, fig_h_in, margin_in, top_in = A4_SHORT, A4_LONG, 18 * MM, 16 * MM
     else:
@@ -392,6 +408,9 @@ def _figure(page_rows, arrangement, tuning, title, geometry, orientation, index,
     ax.set_aspect("equal")
     ax.axis("off")
 
+    if watermark:
+        _draw_watermark(ax, geometry, watermark)
+
     ax.text(geometry.x_left, 0.2, title or f"UkeTab · {arrangement.difficulty}",
             fontsize=geometry.title_pt, fontweight="bold", color=TITLE_COLOR, va="top", ha="left")
     ax.text(geometry.x_left, geometry.header_units * 0.62, _meta(arrangement, tuning),
@@ -413,6 +432,34 @@ def _figure(page_rows, arrangement, tuning, title, geometry, orientation, index,
         )
         y += pitch
     return fig
+
+
+def _draw_watermark(ax, geometry: _Geometry, watermark: str) -> None:
+    """Faint tiled diagonal watermark across the body + a readable signature.
+
+    Tiles are drawn at the bottom z-order so staff lines, noteheads and fret
+    numbers stay fully legible over them; the signature sits top-right of the
+    footer so a printed page still carries the owner.
+    """
+    cols, rows = 3, 4
+    step_x = (geometry.x_right - geometry.x_left) / cols
+    step_y = (geometry.usable_h_units - geometry.header_units) / rows
+    font = geometry.unit_mm * 6.4
+    for iy in range(rows):
+        brick = (step_x / 2) if iy % 2 else 0.0
+        for ix in range(cols + 1):
+            ax.text(
+                geometry.x_left + brick + ix * step_x,
+                geometry.header_units + (iy + 0.5) * step_y,
+                watermark,
+                fontsize=font, rotation=-24, ha="center", va="center",
+                color=WATERMARK_COLOR, alpha=WATERMARK_DIAG_ALPHA, zorder=0.1,
+            )
+    ax.text(
+        geometry.x_right, geometry.usable_h_units - 0.15, watermark,
+        fontsize=geometry.meta_pt, ha="right", va="bottom",
+        color=WATERMARK_COLOR, alpha=WATERMARK_SIG_ALPHA, zorder=5,
+    )
 
 
 def _bar_span(top_line: float, bottom_line: float) -> tuple[float, float]:

@@ -130,6 +130,26 @@ def test_png_flag_writes_images(tmp_path, twinkle_mid):
     assert "twinkle-hard.png" in names
 
 
+def test_png_watermark_custom_and_disabled(tmp_path, twinkle_mid):
+    import pytest
+
+    pytest.importorskip("matplotlib")
+    out = tmp_path / "out"
+    code = run(
+        "arrange", str(twinkle_mid), "--output-dir", str(out),
+        "--png", "--watermark", "tester@example.com",
+    )
+    assert code == EXIT_OK
+    assert (out / "twinkle-easy.png").exists()
+    # explicitly disabled watermark still renders
+    out2 = tmp_path / "out2"
+    code = run(
+        "arrange", str(twinkle_mid), "--output-dir", str(out2), "--png", "--watermark", "",
+    )
+    assert code == EXIT_OK
+    assert (out2 / "twinkle-easy.png").exists()
+
+
 def test_no_png_by_default(tmp_path, twinkle_mid):
     out = tmp_path / "out"
     code = run("arrange", str(twinkle_mid), "--output-dir", str(out))

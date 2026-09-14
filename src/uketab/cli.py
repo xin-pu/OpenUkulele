@@ -65,6 +65,11 @@ def build_parser() -> argparse.ArgumentParser:
         default="landscape",
         help="图片谱纸张方向（默认横向 A4）",
     )
+    arrange_parser.add_argument(
+        "--watermark",
+        default="pu.xin@outlook.com",
+        help="图片谱水印文字（默认 pu.xin@outlook.com）；传空串 --watermark \"\" 可关闭",
+    )
     return parser
 
 
@@ -89,13 +94,13 @@ def _run_arrange(args: argparse.Namespace, parser: argparse.ArgumentParser) -> i
     warnings: list[str] = []
 
     if args.png or args.pdf:
-        try:
-            import matplotlib  # noqa: F401
-        except ImportError as exc:
+        import importlib.util
+
+        if importlib.util.find_spec("matplotlib") is None:
             raise UsageError(
                 "图片谱导出需要 matplotlib",
                 "安装项目的 image extra（pip install uketab[image]），或去掉 --png/--pdf",
-            ) from exc
+            )
 
     if suffix in MIDI_EXTENSIONS:
         events, tempo_bpm, time_signature, midi_warnings = load_midi(input_path)
@@ -216,6 +221,7 @@ def _run_arrange(args: argparse.Namespace, parser: argparse.ArgumentParser) -> i
                     temp_dir / f"{stem}-{difficulty}.png",
                     title=stem,
                     orientation=args.orientation,
+                    watermark=args.watermark,
                 )
                 written_files += " / " + ", ".join(p.name for p in png_paths)
             if args.pdf:
@@ -226,6 +232,7 @@ def _run_arrange(args: argparse.Namespace, parser: argparse.ArgumentParser) -> i
                     temp_dir / f"{stem}-{difficulty}.pdf",
                     title=stem,
                     orientation=args.orientation,
+                    watermark=args.watermark,
                 )
                 written_files += f" / {stem}-{difficulty}.pdf"
             verbose(f"写出 {written_files}")
