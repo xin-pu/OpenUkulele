@@ -84,6 +84,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="歌词文件（.lrc 带时间轴，或纯文本逐音节对齐旋律音），渲染到谱面上方",
     )
     arrange_parser.add_argument(
+        "--separate-vocals",
+        action="store_true",
+        help="音频输入先用 Demucs 分离人声（需安装 separation extra）",
+    )
+    arrange_parser.add_argument(
         "--transpose",
         type=int,
         default=0,
@@ -163,7 +168,15 @@ def _run_arrange(
         from .melody import select_melody
 
         reporter.progress("transcribe", 15, "正在转写音频")
-        events, audio_warnings = load_audio(input_path)
+        if args.separate_vocals:
+            from .input.separation import separated_vocals
+
+            reporter.progress("separate", 10, "正在分离人声")
+            with separated_vocals(input_path) as vocals_path:
+                events, audio_warnings = load_audio(vocals_path)
+            warnings.append("已使用 Demucs vocals stem 进行转写")
+        else:
+            events, audio_warnings = load_audio(input_path)
         raw_event_count = len(events)
         events = select_melody(events)
         warnings.extend(audio_warnings)

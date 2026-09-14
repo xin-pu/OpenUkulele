@@ -18,6 +18,7 @@ dependencies = [
 # onnxruntime is the reliable inference backend on modern TensorFlow
 # (basic-pitch 0.4's bundled SavedModel predates TF 2.16 loading changes).
 audio = ["basic-pitch>=0.4,<0.5", "onnxruntime>=1.17"]
+separation = ["demucs>=4,<5"]
 image = ["matplotlib>=3.7"]
 dev = ["pytest>=8"]
 
