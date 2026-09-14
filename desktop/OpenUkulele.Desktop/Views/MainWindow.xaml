@@ -25,8 +25,8 @@
             <Border Grid.Column="0" Background="{DynamicResource ApplicationBackgroundBrush}" Padding="8">
                 <StackPanel>
                     <TextBlock Text="OpenUkulele" FontWeight="Bold" FontSize="16" Margin="8,12" />
-                    <ui:Button Content="生成谱面" Icon="{ui:SymbolIcon MusicInfo24}" Appearance="Primary" Margin="0,2" />
-                    <ui:Button Content="关于" Icon="{ui:SymbolIcon Info24}" Margin="0,2" IsEnabled="False" />
+                    <ui:Button Content="生成谱面" Appearance="Primary" Margin="0,2" />
+                    <ui:Button Content="关于" Margin="0,2" IsEnabled="False" />
                     <TextBlock Text="v0.1 · 本地离线" FontSize="11" Opacity="0.6" Margin="8,24,8,0" />
                 </StackPanel>
             </Border>
